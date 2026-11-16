@@ -245,7 +245,31 @@ static int terminal_start(bool mouse) {
     const char *term = getenv("TERM");
     if (!term || !strcmp(term, "dumb")) return -1;
     tty_fd = open("/dev/tty", O_RDWR);
-    if (tty_fd < 0 || tcgetattr(tty_fd, &saved_termios) != 0) return -1;
+    /* Some PTYs and sandboxed terminals have no usable /dev/tty. Bash keeps
+       stdin attached to the terminal in process substitutions, while zsh may
+       replace it with /dev/null; stderr remains the interactive terminal.
+       --emit-cd deliberately reserves stdout for the selected path. */
+    if (tty_fd < 0) {
+        const int candidates[] = {STDIN_FILENO, STDERR_FILENO};
+        for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+            int fd = candidates[i];
+            if (!isatty(fd)) continue;
+            const char *name = ttyname(fd);
+            if (name) tty_fd = open(name, O_RDWR);
+            if (tty_fd >= 0) break;
+        }
+    }
+    if (tty_fd < 0 && isatty(STDIN_FILENO)) {
+        int flags = fcntl(STDIN_FILENO, F_GETFL);
+        if (flags >= 0 && (flags & O_ACCMODE) != O_WRONLY)
+            tty_fd = dup(STDIN_FILENO);
+    }
+    if (tty_fd < 0) return -1;
+    if (tcgetattr(tty_fd, &saved_termios) != 0) {
+        close(tty_fd);
+        tty_fd = -1;
+        return -1;
+    }
     struct termios raw = saved_termios;
     raw.c_iflag &= (tcflag_t)~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= (tcflag_t)~OPOST;

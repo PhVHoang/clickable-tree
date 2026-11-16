@@ -24,5 +24,11 @@ printf '%s\n' "$out" | grep -q 'file.txt'
 if printf '%s\n' "$out" | grep -q 'skip.log'; then exit 1; fi
 
 if ./ctree --plain -L 0 "$tmp/root" >/dev/null 2>&1; then exit 1; fi
+
+make install DESTDIR="$tmp/install" PREFIX=/usr/local >/dev/null
+test -x "$tmp/install/usr/local/bin/ctree"
+test -r "$tmp/install/usr/local/share/ctree/ctree.bash"
+test -r "$tmp/install/usr/local/share/ctree/ctree.zsh"
+test -r "$tmp/install/usr/local/share/ctree/ctree.fish"
 python3 tests/pty_test.py "$tmp/root"
 printf 'All tests passed\n'

@@ -102,6 +102,12 @@ def check_shell(shell_name, init_file, keyboard=False):
     if child == 0:
         os.environ["TERM"] = "xterm"
         os.environ["PATH"] = os.getcwd() + os.pathsep + os.environ.get("PATH", "")
+        # Real shells commonly expose stderr as a write-only terminal fd.
+        # ctree must reopen its device read/write rather than dup stderr and
+        # then fail to receive keyboard or mouse input.
+        stderr_fd = os.open(os.ttyname(0), os.O_WRONLY)
+        os.dup2(stderr_fd, 2)
+        os.close(stderr_fd)
         os.execv(shell, [shell, "-c", command])
     try:
         output = read_until(pty_master, b"Space/Right preview")

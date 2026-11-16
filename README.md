@@ -27,26 +27,26 @@ make test
 make install PREFIX="$HOME/.local"
 ```
 
-Put `$HOME/.local/bin` on `PATH`, then source one shell function in your shell's
-startup file. Use the absolute path to this checkout, or copy the appropriate
-file to a stable location.
+Put `$HOME/.local/bin` on `PATH`, then source the installed shell function in
+your shell's startup file. This function is required because a child process
+cannot change the working directory of its parent shell.
 
 **Bash** (`~/.bashrc`):
 
 ```bash
-source /absolute/path/to/clickable-tree/shell/ctree.bash
+source "$HOME/.local/share/ctree/ctree.bash"
 ```
 
 **Zsh** (`~/.zshrc`):
 
 ```zsh
-source /absolute/path/to/clickable-tree/shell/ctree.zsh
+source "$HOME/.local/share/ctree/ctree.zsh"
 ```
 
 **Fish** (`~/.config/fish/config.fish`):
 
 ```fish
-source /absolute/path/to/clickable-tree/shell/ctree.fish
+source "$HOME/.local/share/ctree/ctree.fish"
 ```
 
 Open a new shell, or source the startup file, then run `ctree`.

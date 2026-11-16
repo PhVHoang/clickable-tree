@@ -1,6 +1,6 @@
 # Source this file from ~/.zshrc after installing the ctree executable.
 ctree() {
-    local arg selected
+    local arg selected output rc
     for arg in "$@"; do
         case "$arg" in
             --help|--version|--plain) command ctree "$@"; return $? ;;
@@ -10,7 +10,13 @@ ctree() {
         command ctree "$@"
         return $?
     fi
-    if IFS= read -r -d '' selected < <(command ctree --emit-cd "$@"); then
+    output=$(mktemp "${TMPDIR:-/tmp}/ctree.XXXXXX") || return 1
+    command ctree --emit-cd "$@" >| "$output"
+    rc=$?
+    if (( rc == 0 )) && IFS= read -r -d '' selected < "$output"; then
         builtin cd -- "$selected"
+        rc=$?
     fi
+    command rm -f -- "$output"
+    return $rc
 }
