@@ -1,15 +1,17 @@
 # ctree
 
 `ctree` is a small, dependency-free C program that prints a directory tree and,
-in an interactive terminal, lets you inspect and enter directories with the
-mouse. It builds on macOS and Linux with a C compiler and `make`.
+in an interactive terminal, lets you inspect and enter directories with a
+keyboard or mouse. It builds on macOS and Linux with a C compiler and `make`.
 
 ## How it works
 
 The executable scans and renders the tree itself. When attached to a terminal,
 it switches to the alternate screen, enables xterm-compatible SGR mouse
-reporting, and draws a small box with the clicked directory's immediate
+reporting by default, and draws a small box with a directory's immediate
 children. A second click on the same directory within 450 ms selects it.
+Keyboard controls provide the same preview and selection actions without a
+mouse; `--keyboard-only` skips mouse reporting entirely.
 The executable writes the selected absolute path as NUL-terminated data;
 a shell function receives it and runs `cd` in the current shell.
 
@@ -55,15 +57,19 @@ Open a new shell, or source the startup file, then run `ctree`.
 ctree                     # current directory, interactive on a terminal
 ctree -a -L 2 ~/Projects  # hidden files and a two-level limit
 ctree -d --dirsfirst      # directories only
+ctree --keyboard-only .   # interactive, with no mouse reporting
 ctree --plain .            # static output in terminal scrollback
 ctree -L 3 . > tree.txt   # static output when redirected
 ```
 
-Click a directory once to see its direct children in a floating box. Click
-it again within 450 ms to change the shell directory. You can also move with
-`j`/`k` or the arrow keys and press Enter. The wheel and Page Up/Down move five
-rows. `Esc` closes the box; `q`, Ctrl-C, or Ctrl-Z exits. The box does not open
-files.
+Use `j`/`k` or Up/Down to select a directory. Press Space or Right to see its
+direct children in a floating box. Press Enter to change the shell directory.
+Esc or Left closes the box; pressing Space or Right again also toggles it off.
+Page Up/Down moves five rows, and `q`, Ctrl-C, or Ctrl-Z exits. The box does
+not open files.
+
+With a mouse, one click previews a directory and a second click on that same
+directory within 450 ms changes the shell directory. The wheel moves five rows.
 
 Supported tree-style options are `-a`, `-d`, `-L N`, `-I PATTERN`, `-P PATTERN`,
 `-f`, `-p`, `-s`, `-h`, `-t`, `-r`, `-i`, `-F`, `-n`, `--dirsfirst`, and
@@ -74,9 +80,9 @@ prevent your shell from expanding them.
 ## Terminal and shell limits
 
 - The popup is drawn **inside the terminal**, not as a native OS window.
-  It requires an xterm-compatible terminal that sends SGR mouse events
-  (`1000` and `1006`) and supports the alternate screen (`1049`). If clicks
-  are intercepted by the terminal or a multiplexer, use the keyboard controls.
+  Interactive mode requires an alternate screen (`1049`). Mouse use also needs
+  SGR events (`1000` and `1006`). `--keyboard-only` avoids those mouse modes;
+  use it if a terminal or multiplexer intercepts clicks.
 - An executable cannot change its parent shell's working directory. Source
   the provided shell function for double-click `cd`. Running the executable
   directly prints the selected path instead.
@@ -97,7 +103,7 @@ shell functions run in the current shell context and can perform `cd` there.
 
 ## Development
 
-`make test` checks static rendering and uses a pseudo-terminal to test the
-single-click popup, double-click path selection, terminal-mode cleanup, and
-`cd` through Bash and Zsh when those shells are installed. The test suite
-needs Python 3; the installed program does not.
+`make test` checks static rendering and uses a pseudo-terminal to test mouse
+and keyboard previews, directory selection, terminal-mode cleanup, and `cd`
+through Bash and Zsh when those shells are installed. The test suite needs
+Python 3; the installed program does not.

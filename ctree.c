@@ -25,6 +25,7 @@
 typedef struct {
     bool all, dirs_only, full_path, permissions, sizes, human, time_sort;
     bool reverse, dirs_first, no_indent, classify, no_report, plain, emit_cd;
+    bool keyboard_only;
     int level;
     const char *include, *exclude;
 } Options;
@@ -44,6 +45,7 @@ static volatile sig_atomic_t interrupted, resized;
 static int tty_fd = -1;
 static struct termios saved_termios;
 static bool terminal_active;
+static bool mouse_active;
 
 static void *xmalloc(size_t n) {
     void *p = malloc(n ? n : 1);
@@ -228,7 +230,9 @@ static void print_tree(const Nodes *nodes, const Options *o, FILE *out) {
 }
 static void terminal_restore(void) {
     if (!terminal_active) return;
-    const char *off = "\033[?1000l\033[?1006l\033[?25h\033[?1049l";
+    const char *off = mouse_active ?
+        "\033[?1000l\033[?1006l\033[?25h\033[?1049l" :
+        "\033[?25h\033[?1049l";
     (void)write(tty_fd, off, strlen(off));
     (void)tcsetattr(tty_fd, TCSAFLUSH, &saved_termios);
     terminal_active = false;
@@ -237,7 +241,7 @@ static void on_signal(int sig) {
     if (sig == SIGWINCH) resized = 1;
     else interrupted = 1;
 }
-static int terminal_start(void) {
+static int terminal_start(bool mouse) {
     const char *term = getenv("TERM");
     if (!term || !strcmp(term, "dumb")) return -1;
     tty_fd = open("/dev/tty", O_RDWR);
@@ -251,8 +255,11 @@ static int terminal_start(void) {
     raw.c_cc[VTIME] = 1;
     if (tcsetattr(tty_fd, TCSAFLUSH, &raw) != 0) return -1;
     terminal_active = true;
+    mouse_active = mouse;
     atexit(terminal_restore);
-    const char *on = "\033[?1049h\033[?25l\033[?1006h\033[?1000h";
+    const char *on = mouse ?
+        "\033[?1049h\033[?25l\033[?1006h\033[?1000h" :
+        "\033[?1049h\033[?25l";
     (void)write(tty_fd, on, strlen(on));
     struct sigaction sa = {0};
     sa.sa_handler = on_signal;
@@ -368,7 +375,7 @@ static void draw_view(FILE *out, View *v, const Nodes *nodes, const Options *o) 
         }
     }
     fprintf(out, "\033[%d;1H\033[0m", v->rows);
-    draw_clipped(out, "ctree  click: preview  double-click/Enter: cd  j/k: move  q: quit", v->cols);
+    draw_clipped(out, "j/k move  Space/Right preview  Enter cd  Esc/Left close  q quit", v->cols);
     fflush(out);
 }
 static bool in_popup(const View *v, int x, int y) {
@@ -401,12 +408,14 @@ static int read_event(int fd, int *x, int *y, bool *click) {
     }
     if (len == 2 && seq[0] == '[' && seq[1] == 'A') return 'k';
     if (len == 2 && seq[0] == '[' && seq[1] == 'B') return 'j';
+    if (len == 2 && seq[0] == '[' && seq[1] == 'C') return 'l';
+    if (len == 2 && seq[0] == '[' && seq[1] == 'D') return 'h';
     if (len == 3 && seq[0] == '[' && seq[1] == '5' && seq[2] == '~') return 'K';
     if (len == 3 && seq[0] == '[' && seq[1] == '6' && seq[2] == '~') return 'J';
     return 27;
 }
 static int interactive(const Nodes *nodes, const Options *o) {
-    if (terminal_start() != 0) return -1;
+    if (terminal_start(!o->keyboard_only) != 0) return -1;
     FILE *out = fdopen(dup(tty_fd), "w");
     if (!out) { terminal_restore(); return -1; }
     View v = {.popup_for = -1, .last_click = -1};
@@ -416,7 +425,7 @@ static int interactive(const Nodes *nodes, const Options *o) {
         if (redraw || resized) { resized = 0; draw_view(out, &v, nodes, o); redraw = false; }
         int x = 0, y = 0; bool click = false;
         int key = read_event(tty_fd, &x, &y, &click);
-        if (click) {
+        if (click && !o->keyboard_only) {
             if (in_popup(&v, x, y)) continue;
             int i = v.top + y - 1;
             if (y < 1 || y >= v.rows || i >= (int)nodes->len) continue;
@@ -436,9 +445,15 @@ static int interactive(const Nodes *nodes, const Options *o) {
             if (next >= (int)nodes->len) next = (int)nodes->len - 1;
             if (next >= 0 && next < (int)nodes->len) v.selected = next;
             close_popup(&v); v.last_click = -1; redraw = true;
+        } else if (key == ' ' || key == 'l') {
+            if (nodes->items[v.selected].is_dir) {
+                if (v.popup_for == v.selected) close_popup(&v);
+                else show_popup(&v, nodes, o, v.selected);
+                redraw = true;
+            }
         } else if (key == '\r' || key == '\n') {
             if (nodes->items[v.selected].is_dir) { chosen = v.selected; break; }
-        } else if (key == 27) { close_popup(&v); redraw = true; }
+        } else if (key == 27 || key == 'h') { close_popup(&v); redraw = true; }
     }
     close_popup(&v);
     fclose(out);
@@ -464,6 +479,7 @@ static void usage(FILE *out) {
           "  --dirsfirst    list directories first\n"
           "  --noreport     omit totals\n"
           "  --plain        print a static tree, even on a terminal\n"
+          "  --keyboard-only  do not enable terminal mouse reporting\n"
           "  --emit-cd      emit selected path as NUL for a shell function\n"
           "  --help         show this help\n", out);
 }
@@ -479,6 +495,7 @@ static int parse(int argc, char **argv, Options *o, int *first_path) {
         if (!strcmp(arg, "--dirsfirst")) { o->dirs_first = true; continue; }
         if (!strcmp(arg, "--noreport")) { o->no_report = true; continue; }
         if (!strcmp(arg, "--plain")) { o->plain = true; continue; }
+        if (!strcmp(arg, "--keyboard-only")) { o->keyboard_only = true; continue; }
         if (!strcmp(arg, "--emit-cd")) { o->emit_cd = true; continue; }
         for (const char *p = arg + 1; *p; p++) {
             switch (*p) {
