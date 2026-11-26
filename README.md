@@ -11,6 +11,21 @@ the [development guide](docs/development.md) for implementation details.
 
 ## Install
 
+### Homebrew on macOS
+
+```sh
+brew install PhVHoang/tap/ctree
+```
+
+To let `ctree` change your current directory, add the matching line to your
+shell startup file and open a new shell:
+
+- Zsh (`~/.zshrc`): `source "$(brew --prefix)/share/ctree/ctree.zsh"`
+- Bash (`~/.bashrc`): `source "$(brew --prefix)/share/ctree/ctree.bash"`
+- Fish (`~/.config/fish/config.fish`): `source (brew --prefix)/share/ctree/ctree.fish`
+
+### Build from source
+
 ```sh
 make
 make test
